@@ -10,7 +10,6 @@ let ctx;
 //font
 let fuente = new FontFace('Flood', "url(fonts/Flood.otf) format('opentype')");
 document.fonts.add(fuente);
-fuente.load().then(tft);
 
 //juego
 let vidas = 5;
@@ -87,6 +86,15 @@ imgInstruccionesObstaculos.src = "img/placa-obstaculos.png"
 let imgInstruccionesSkatepark = new Image();
 imgInstruccionesSkatepark.src = "img/placa-skatepark.png"
 let imgFaroles = new Image();
+// assign main sprites & elements once so preloader can fetch them
+imgGoofy.src = "img/sprite.png";
+imgEnergizante.src = "img/energizante.png";
+imgRemera.src = "img/remera.png";
+imgAerosol.src = "img/aerosol.png";
+imgZapatillas.src = "img/zapatillas.png";
+imgCono.src = "img/cono.png";
+imgTacho.src = "img/tacho.png";
+imgFaroles.src = "img/faroles-largo.png";
 
 //goofy, treats, obstaculos y faroles
 let goofy = new Personaje(imgGoofy, posXGoofy, posYGoofy, anchoGoofy, altoGoofy);
@@ -115,6 +123,8 @@ audioPatina = new Audio();
 audioPatina.src = "audios/patina.mp3";
 audioMusica = new Audio();
 audioMusica.src = "audios/musica.mp3";
+// loop background music
+audioMusica.loop = true;
 audioGanaste = new Audio();
 audioGanaste.src = "audios/ganaste.mp3";
 audioCaida = new Audio();
@@ -139,13 +149,35 @@ audioPerdedor.volume = 0.3;
 audioInstrucciones.volume = 0.2;
 audioClick.volume = 0.5;
 
+
+
+let tftStarted = false;
+
 function tft() {
+    if (tftStarted) return; // guard against double-calls
+    tftStarted = true;
     canvas = document.getElementById("canvas");
-    canvas.style.backgroundImage = "url(img/fondo-skatepark-test.png),url(img/fondo-02.png),url(img/fondo-03.png),url(img/fondo-04.png)";
-    canvas.style.backgroundSize = "cover";
-    canvas.style.backgroundPosition = "left";
     ctx = canvas.getContext("2d");
-    dibujarInicio();
+    // show a simple loading message while assets load
+    borrar();
+    ctx.save();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 800, 450);
+    ctx.font = "30px Flood, sans-serif";
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Cargando...', 340, 220);
+    ctx.restore();
+
+    // Load all images, audio and fonts before showing the initial plate
+    loadAllAssets().then(function () {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'none';
+        // Set background now to avoid showing it before assets load
+        canvas.style.backgroundImage = "url(img/fondo-skatepark-test.png),url(img/fondo-02.png),url(img/fondo-03.png),url(img/fondo-04.png)";
+        canvas.style.backgroundSize = "cover";
+        canvas.style.backgroundPosition = "left";
+        dibujarInicio();
+    });
     audioSalto.pause();
     /*controles = false;*/
 
@@ -156,6 +188,40 @@ function tft() {
         // touchstart: procesar toques activos
         canvas.addEventListener('touchstart', function (ev) {
             ev.preventDefault();
+            // If we're on an UI plate, interpret a single touch as a tap on buttons
+            if (ev.touches && ev.touches.length === 1) {
+                const pos = getCanvasCoords(ev.touches[0]);
+                // Reuse the same hit tests as the click handler for plates
+                if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
+                    audioClick.play().catch(() => {});
+                    dibujarInstruccionesGoofy();
+                    audioInstrucciones.play().catch(() => {});
+                    return;
+                } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
+                    audioClick.play().catch(() => {});
+                    dibujarInstruccionesObstaculos();
+                    return;
+                } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
+                    audioClick.play().catch(() => {});
+                    dibujarInstruccionesSkatepark();
+                    return;
+                } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
+                    audioClick.play().catch(() => {});
+                    dibujarControles();
+                    return;
+                } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) {
+                    audioClick.play().catch(() => {});
+                    audioMusica.currentTime = 0;
+                    audioMusica.play().catch(() => {});
+                    tft();
+                    juego();
+                    return;
+                } else if (fin == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) {
+                    reset();
+                    return;
+                }
+            }
+            // otherwise treat as gameplay touch input (possibly multi-touch)
             processTouches(ev.touches);
         }, { passive: false });
 
@@ -183,10 +249,12 @@ function tft() {
     // DPI/backing-store scaling: make canvas crisp on HiDPI devices
     // resize immediately and also on window resize/orientation change
     resizeCanvasForDPR();
-    window.addEventListener('resize', function () {
-        // small debounce not required here; it's cheap
+    const onResize = function () {
         resizeCanvasForDPR();
-    });
+        updateOrientationOverlay();
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
 };
 
 //dibujar placa del inicio
@@ -247,47 +315,11 @@ function juego() {
     canvas.style.backgroundSize = "cover";
     /*canvas.style.position = "absolute; top: 0px; left: 0px; right: 0px; bottom: 0px; margin: auto";*/
     ctx = canvas.getContext("2d");
+    // ensure overlay state reflects current orientation while playing
+    updateOrientationOverlay();
 
     //dibujar
-    imgFaroles.src = "img/faroles-largo.png";
-    imgFaroles.onload = function () {
-        faroles.dibujar();
-    };
-
-    imgGoofy.src = "img/sprite.png";
-    imgGoofy.onload = function () {
-        goofy.dibujar();
-    };
-
-    imgEnergizante.src = "img/energizante.png";
-    imgEnergizante.onload = function () {
-        energizante.dibujar();
-    };
-
-    imgRemera.src = "img/remera.png";
-    imgRemera.onload = function () {
-        remera.dibujar();
-    };
-
-    imgAerosol.src = "img/aerosol.png";
-    imgAerosol.onload = function () {
-        aerosol.dibujar();
-    };
-
-    imgZapatillas.src = "img/zapatillas.png";
-    imgZapatillas.onload = function () {
-        zapatillas.dibujar();
-    };
-
-    imgCono.src = "img/cono.png";
-    imgCono.onload = function () {
-        cono.dibujar();
-    };
-
-    imgTacho.src = "img/tacho.png";
-    imgTacho.onload = function () {
-        tacho.dibujar();
-    };
+    // Images are loaded during initialization; just draw current frame
 
     if (pausado == false) {
         if (inicio == true) {
@@ -304,8 +336,10 @@ function juego() {
 
             canvas.style.backgroundPosition = posicionFondo1 + "px 0px," + posicionFondo2 + "px 0px," + posicionFondo3 + "px 0px," + posicionFondo4 + "px 0px";
 
-            //musica
-            audioMusica.play();
+            //musica: only start when currently paused to avoid repeated play() calls
+            if (audioMusica.paused) {
+                audioMusica.play().catch(() => {});
+            }
 
             //mover los treats y los obstáculos de derecha a izquierda
             energizante.mover();
@@ -322,6 +356,11 @@ function juego() {
             //En lugar de tocar la posicion en x dentro de avanzar o retroceder lo hago aca, de acuerdo a una velocidad. Si es cero queda igual, si es positivo avanza y si es negativo retrocede.
             goofy.x += goofy.vx
 
+            // Clamp goofy.x to canvas logical bounds so the character cannot escape left/right
+            const logicalW = 800;
+            if (goofy.x < 0) goofy.x = 0;
+            if (goofy.x > logicalW - goofy.ancho) goofy.x = logicalW - goofy.ancho;
+
             //logica para devolver a goofy al suelo
             if (goofy.y > 400 - goofy.alto) {//470 = piso
                 if (goofy.saltando) { //salto caída solo cuando está en el suelo
@@ -330,7 +369,7 @@ function juego() {
                 goofy.velocidad = 0; //que no tenga más impulso
                 goofy.y = 400 - goofy.alto; //reubico al personaje en y
                 goofy.saltando = false;
-                audioPatina.play();
+                if (audioPatina.paused) audioPatina.play();
             } else {
                 audioPatina.pause();
             };
@@ -470,17 +509,24 @@ function borrar() {
 
 // convertir coordenadas del evento del mouse a coordenadas del canvas
 function getCanvasCoords(e) {
+    // prefer existing canvas reference; fall back to DOM lookup
+    const cnv = canvas || document.getElementById('canvas');
+    if (!cnv) {
+        return { x: 0, y: 0 };
+    }
     // rect del canvas en el viewport
-    const rect = canvas.getBoundingClientRect();
+    const rect = cnv.getBoundingClientRect();
     // factor de escala entre tamaño real del canvas (píxeles) y tamaño en CSS
     const dpr = window.devicePixelRatio || 1;
     // canvas.width/height may be backing-store pixels (logical * dpr).
     // We want logical coordinates (0..800), so remove dpr from the scale.
-    const scaleX = (canvas.width / rect.width) / dpr;
-    const scaleY = (canvas.height / rect.height) / dpr;
+    const scaleX = (cnv.width / rect.width) / dpr;
+    const scaleY = (cnv.height / rect.height) / dpr;
     // usar clientX/Y para considerar scroll y margen del viewport
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const clientX = (typeof e.clientX === 'number') ? e.clientX : (e.clientX === undefined && e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = (typeof e.clientY === 'number') ? e.clientY : (e.clientY === undefined && e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
     return { x, y };
 };
 
@@ -503,11 +549,53 @@ function resizeCanvasForDPR() {
     ctx.scale(dpr, dpr);
 }
 
+// Wait for images, audio and font to be ready before starting (simple aggregator)
+function loadAllAssets() {
+    const imgs = [imgGoofy, imgEnergizante, imgRemera, imgAerosol, imgZapatillas, imgCono, imgTacho, imgBotonInicio, imgBotonInicio2, imgBotonFlecha, imgBotonFlecha2, imgPlacaInicio, imgFinalGanador, imgFinalPerdedor, imgBotonNuevo, imgBotonNuevo2, imgControles, imgInstruccionesGoofy, imgInstruccionesObstaculos, imgInstruccionesSkatepark, imgFaroles];
+    const audios = [audioGolpe, audioEnergizante, audioRemera, audioAerosol, audioZapatillas, audioSalto, audioPatina, audioMusica, audioGanaste, audioCaida, audioPerdedor, audioInstrucciones, audioClick];
+    let remaining = imgs.length + audios.length + 1; // +1 for font
+
+    return new Promise((resolve) => {
+        function oneDone() {
+            remaining--;
+            if (remaining <= 0) resolve();
+        }
+
+        imgs.forEach(img => {
+            if (!img) return oneDone();
+            if (img.complete && img.naturalWidth !== 0) return oneDone();
+            img.addEventListener('load', oneDone);
+            img.addEventListener('error', oneDone);
+        });
+
+        audios.forEach(a => {
+            try {
+                if (!a) return oneDone();
+                if (a.readyState >= 3) return oneDone();
+                a.addEventListener('canplaythrough', oneDone, { once: true });
+                a.addEventListener('error', oneDone, { once: true });
+            } catch (e) {
+                oneDone();
+            }
+        });
+
+        // font
+        fuente.load().then(oneDone).catch(oneDone);
+
+        // Safety: if something never fires, timeout after 8s
+        setTimeout(() => {
+            remaining = 0; oneDone();
+        }, 8000);
+    });
+}
+
 // Procesar un TouchList (o array-like) y aplicar controles según zonas del canvas
 function processTouches(touches) {
     if (!canvas) return;
-    const w = canvas.width;
-    const h = canvas.height;
+    // use logical canvas dimensions (after DPR scaling) so coordinates are consistent with drawing
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
     const leftBound = w * 0.33;
     const rightBound = w * 0.66;
     const midY = h * 0.5;
@@ -590,6 +678,18 @@ function drawTouchButtons() {
     ctx.fillText('▼', w / 2, midY + (h - midY) / 2);
 
     ctx.restore();
+}
+
+// Orientation helper: show an overlay in portrait on mobile to suggest landscape
+function updateOrientationOverlay() {
+    const el = document.getElementById('rotate');
+    if (!el) return;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if (isMobileTouch() && isPortrait) {
+        el.style.display = 'flex';
+    } else {
+        el.style.display = 'none';
+    }
 }
 
 //pausar
@@ -873,18 +973,26 @@ document.addEventListener("keyup", function (e) {
     //avanzar por las placas y presionar botones con tecla Enter o barra espaciadora
     if (e.key == "Enter" || e.key == " ") {
         if (placaInicio == true) { //de placa inicio a instrucciones goofy
+            audioClick.play().catch(() => {});
             dibujarInstruccionesGoofy();
-            audioInstrucciones.play();
+            audioInstrucciones.play().catch(() => {});
         } else if (instruccionesGoofy == true) { //de instrucciones goofy a instrucciones obstaculos
+            audioClick.play().catch(() => {});
             dibujarInstruccionesObstaculos();
         } else if (instruccionesObstaculos == true) { //de instrucciones obstaculos a instrucciones skatepark
+            audioClick.play().catch(() => {});
             dibujarInstruccionesSkatepark();
         } else if (instruccionesSkatepark == true) { //de instrucciones skatepark a  instrucciones controles
+            audioClick.play().catch(() => {});
             dibujarControles();
         } else if (controles == true) { //de controles al juego
+            audioClick.play().catch(() => {});
+            audioMusica.currentTime = 0;
+            audioMusica.play().catch(() => {});
             tft();
             juego();
         } else if (fin == true) { //al llegar al fin, reiniciar
+            audioClick.play().catch(() => {});
             reset();
         }
     };
@@ -892,25 +1000,35 @@ document.addEventListener("keyup", function (e) {
 
 //listener para click
 document.addEventListener('click', function (e) {
+    if (!canvas) return; // ignore document clicks before canvas is ready
     const pos = getCanvasCoords(e);
     console.log("canvas X:" + Math.round(pos.x) + " Y:" + Math.round(pos.y));
     //de placa inicio a instrucciones goofy
     // NOTE: hitboxes use canvas coordinates where the buttons are drawn
     if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
+        audioClick.play().catch(() => {});
         dibujarInstruccionesGoofy();
-        audioInstrucciones.play();
+        audioInstrucciones.play().catch(() => {});
     } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones goofy a instrucciones obstaculos
+        audioClick.play().catch(() => {});
         dibujarInstruccionesObstaculos();
     } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones obstaculos a instrucciones skatepark
+        audioClick.play().catch(() => {});
         dibujarInstruccionesSkatepark();
     } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones skatepark a instrucciones controles
+        audioClick.play().catch(() => {});
         dibujarControles();
     } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) { //de controles al juego
+        audioClick.play().catch(() => {});
+        audioMusica.currentTime = 0;
+        audioMusica.play().catch(() => {});
         tft();
         juego();
     } else if (fin == true && ganaste == false && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) { //al perder o ganar, reiniciar
+        audioClick.play().catch(() => {});
         reset();
     } else if (fin == true && ganaste == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) { //al perder o ganar, reiniciar
+        audioClick.play().catch(() => {});
         reset();
         audioMusica.currentTime = 0;
     }
@@ -918,6 +1036,7 @@ document.addEventListener('click', function (e) {
 
 //listener para hover
 document.addEventListener('mousemove', function (e) {
+    if (!canvas) return; // ignore hover before canvas is ready
     const pos = getCanvasCoords(e);
     //de placa inicio a instrucciones goofy
     if (placaInicio == true) {
@@ -962,19 +1081,20 @@ document.addEventListener('mousemove', function (e) {
 });
 
 document.addEventListener("mouseup", function (e) {
+    if (!canvas) return; // ignore before canvas is ready
     const pos = getCanvasCoords(e);
     if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     } else if (fin == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) {
-        audioClick.play();
+        audioClick.play().catch(() => {});
     };
     /*
     ctx.drawImage
@@ -983,12 +1103,16 @@ document.addEventListener("mouseup", function (e) {
 }*/
 });
 
-//local storage
-
-/*if (localStorage){
+// local storage (example - currently disabled)
+/*
+if (localStorage){
     localStorage.setItem("currentScore", puntos);
-};
+}
 
 if (localStorage){
-    let score = localStorage.getItem("currentScore")
-}*/
+    let score = localStorage.getItem("currentScore");
+}
+*/
+
+// ensure tft runs once on full page load
+window.addEventListener('load', tft, { once: true });
