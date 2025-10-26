@@ -7,22 +7,53 @@
     <title>tricks for treats +</title>
     <script src="js/tricks for treats v4 2-12.js"></script>
     <link rel="icon" type="image/x-icon" href="img/favicon.ico">
-    <!--color de fondo-->
+    <!--color de fondo and responsive canvas for itch.io embeds-->
     <style>
-        body {
+        html, body {
+            height: 100%;
+            margin: 0;
             background-color: #000;
             background-size: cover;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        ;
+        /* wrapper keeps the canvas centered inside the embed */
+        .canvas-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 5vh; /* keep some vertical spacing */
+        }
+
+        /* Make the canvas scale to its container while keeping internal resolution
+           (leave width/height attributes as the drawing resolution).
+           max-width matches your original 800px so it won't exceed the design.
+           touch-action:none prevents the browser from interpreting touch gestures
+           (so touch controls work reliably in the game). */
+        #canvas {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            display: block;
+            touch-action: none;
+            -ms-touch-action: none;
+            margin: 0 auto;
+            image-rendering: optimizeSpeed;
+        }
+
+        /* keep the title image centered below the canvas */
+        .title-wrap {
+            text-align: center;
+            padding-top: 3vh;
+        }
     </style>
 </head>
 
 <body onload="tft()">
-    <div style="text-align: center; padding-top: 10vh;">
+    <div class="canvas-wrap">
         <canvas id="canvas" width="800" height="450"></canvas>
     </div>
-    <div style="text-align: center; padding-top: 5vh;">
+    <div class="title-wrap">
         <img src="img/titulo.gif" alt="tft" width="600" height="93">
     </div>
 </body>

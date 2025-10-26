@@ -34,6 +34,7 @@ let instruccionesGoofy = false;
 let instruccionesObstaculos = false;
 let instruccionesSkatepark = false;
 let ganaste;
+let touchHandlersAdded = false; // evitar agregar listeners múltiples
 
 //variables iniciales del personaje
 let altoGoofy = 150;
@@ -147,6 +148,45 @@ function tft() {
     dibujarInicio();
     audioSalto.pause();
     /*controles = false;*/
+
+    // Agregar soporte táctil sólo una vez
+    if (!touchHandlersAdded && canvas) {
+        touchHandlersAdded = true;
+
+        // touchstart: procesar toques activos
+        canvas.addEventListener('touchstart', function (ev) {
+            ev.preventDefault();
+            processTouches(ev.touches);
+        }, { passive: false });
+
+        // touchmove: actualizar acciones según el/los toques actuales
+        canvas.addEventListener('touchmove', function (ev) {
+            ev.preventDefault();
+            processTouches(ev.touches);
+        }, { passive: false });
+
+        // touchend / touchcancel: procesar los toques restantes; si no hay toques, parar movimiento
+        function handleTouchEnd(ev) {
+            ev.preventDefault();
+            if (ev.touches && ev.touches.length > 0) {
+                processTouches(ev.touches);
+            } else {
+                // no quedan toques: detener movimiento horizontal
+                if (goofy) goofy.vx = 0;
+            }
+        }
+
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    }
+
+    // DPI/backing-store scaling: make canvas crisp on HiDPI devices
+    // resize immediately and also on window resize/orientation change
+    resizeCanvasForDPR();
+    window.addEventListener('resize', function () {
+        // small debounce not required here; it's cheap
+        resizeCanvasForDPR();
+    });
 };
 
 //dibujar placa del inicio
@@ -316,6 +356,10 @@ function juego() {
             cono.dibujar();
             tacho.dibujar();
             faroles.dibujar();
+            // draw visible touch buttons only for mobile-like touch devices
+            if (isMobileTouch()) {
+                drawTouchButtons();
+            }
 
             //PERDISTE
         } if (vidas < 1) {
@@ -429,13 +473,124 @@ function getCanvasCoords(e) {
     // rect del canvas en el viewport
     const rect = canvas.getBoundingClientRect();
     // factor de escala entre tamaño real del canvas (píxeles) y tamaño en CSS
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    // canvas.width/height may be backing-store pixels (logical * dpr).
+    // We want logical coordinates (0..800), so remove dpr from the scale.
+    const scaleX = (canvas.width / rect.width) / dpr;
+    const scaleY = (canvas.height / rect.height) / dpr;
     // usar clientX/Y para considerar scroll y margen del viewport
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
     return { x, y };
 };
+
+// resize canvas backing store for devicePixelRatio so the canvas is crisp on HiDPI
+function resizeCanvasForDPR() {
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    // logical resolution we want to keep for drawing commands
+    const logicalWidth = 800;
+    const logicalHeight = 450;
+
+    // set backing store size
+    canvas.width = Math.round(logicalWidth * dpr);
+    canvas.height = Math.round(logicalHeight * dpr);
+
+    // keep the CSS size as responsive (it's controlled by CSS: width:100% max-width:800px)
+    // Reset transforms and scale the context so drawing can use logical coordinates
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // reset
+    ctx.scale(dpr, dpr);
+}
+
+// Procesar un TouchList (o array-like) y aplicar controles según zonas del canvas
+function processTouches(touches) {
+    if (!canvas) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const leftBound = w * 0.33;
+    const rightBound = w * 0.66;
+    const midY = h * 0.5;
+
+    // Primero: decidir movimiento horizontal (left/right). Si existe al menos
+    // un touch en la izquierda, retroceder; si existe al menos uno en derecha, avanzar.
+    let foundLeft = false;
+    let foundRight = false;
+    for (let i = 0; i < touches.length; i++) {
+        const pos = getCanvasCoords(touches[i]);
+        if (pos.x < leftBound) foundLeft = true;
+        if (pos.x > rightBound) foundRight = true;
+        if (foundLeft && foundRight) break;
+    }
+    if (foundLeft && !foundRight) {
+        goofy.retroceder();
+    } else if (foundRight && !foundLeft) {
+        goofy.avanzar();
+    } else if (!foundLeft && !foundRight) {
+        // no touches horizontales -> parar movimiento horizontal
+        goofy.vx = 0;
+    }
+
+    // Luego: acciones verticales en la columna central
+    for (let i = 0; i < touches.length; i++) {
+        const pos = getCanvasCoords(touches[i]);
+        if (pos.x >= leftBound && pos.x <= rightBound) {
+            if (pos.y < midY) {
+                // top middle -> salto
+                goofy.saltar();
+            } else {
+                // bottom middle -> bajar pero sólo si está saltando
+                if (goofy.saltando) goofy.bajar();
+            }
+            break; // una vez aplicada la acción vertical, salir
+        }
+    }
+}
+
+// Detectar si estamos en un dispositivo táctil tipo móvil (coarse pointer OR small width)
+function isMobileTouch() {
+    const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const small = window.innerWidth <= 900; // heuristic for embed/mobile
+    return touch && (coarse || small);
+}
+
+// Draw semi-transparent on-screen touch buttons that match the touch zones.
+function drawTouchButtons() {
+    if (!canvas || !ctx) return;
+    const w = 800; // logical width
+    const h = 450; // logical height
+    const leftBound = w * 0.33;
+    const rightBound = w * 0.66;
+    const midY = h * 0.5;
+
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#000';
+
+    // left zone (visual on left third)
+    ctx.fillRect(0, 0, leftBound, h);
+    // right zone (visual on right third)
+    ctx.fillRect(rightBound, 0, w - rightBound, h);
+    // middle top (jump)
+    ctx.fillRect(leftBound, 0, rightBound - leftBound, midY);
+    // middle bottom (down)
+    ctx.fillRect(leftBound, midY, rightBound - leftBound, h - midY);
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '36px Flood';
+
+    // icons/text for zones
+    ctx.fillText('◀', leftBound / 2, h / 2);
+    ctx.fillText('▶', rightBound + (w - rightBound) / 2, h / 2);
+    ctx.fillText('▲', w / 2, midY / 2);
+    ctx.fillText('▼', w / 2, midY + (h - midY) / 2);
+
+    ctx.restore();
+}
 
 //pausar
 function pausar() {

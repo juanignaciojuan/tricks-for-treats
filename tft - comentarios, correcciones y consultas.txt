@@ -1,0 +1,88 @@
+HACER:
+
+	ARTE:
+		- agregar el fondo recortado de papel a los treats y los obstáculos
+		- cambiar los graffittis de la capa del paredón (juan)
+
+	JS:
+		- evitar que los obstáculos se superpongan y que la distancia entre ellos sea suficiente para esquivarlos (array)
+		- corregir la desaparición del fondo
+
+	IDEAL:
+		- subir a itch.io
+		- configurar los event listeners para que funcionen con el canvas en cualquier lugar de la ventana (e.x/text-align/canvas?)
+		- tres niveles (día/tarde/noche)
+		- function niveles ();
+		- cambiar la opacidad según niveles
+		- agregar sprite de treats y obstáculos
+		- cambiar música al ganar o perder → consultarle a mica si no le jode (juan)
+		- agregar un score board, donde puedas guardar tu nombre y puntaje (localStorage)
+
+-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+
+OPINIONES/TEST DE JUGADORES:
+- que hayan policías que lo persiguen a goofy por pintar en las paredes (remite a subway surfers)
+- que se desvíe en el camino
+- que hayan más niveles
+- que sea más difícil
+
+CAPAZ:
+- limitar treats a energizantes y zapatillas
+
+-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+
+HECHO:
+-agregar boton de inicio
+-al clickear en el boton inicia el juego
+-sprite de goofy
+-fondo dinamico
+-agregar los nuevos treats y obstáculos
+-evitar que se agache al mantener la tecla de agacharse presionada
+-agregar una letra de la palabra skate por cada vez que goofy colisiona con un obstáculo y pierde al completarla (al haber chocado 5 veces)
+-agregarle música de fondo cuando jugás
+-agregarle música al perder
+-agregarle música al ganar
+-elegir y agregar typo
+-agregar el sonido de las ruedas del skate contra el asfalto cuando está en el suelo y de la caída del salto cuando cae después del salto
+-agregar linea de meta
+-ajustar el tamaño de los obstáculos
+-ubicar los obstáculos en el suelo
+-agregar avanzar y retroceder a la placa de controles
+-ponernos en los créditos
+-setear la velocidad del interval a requestAnimationFrame
+-aumentar la velocidad progresivamente
+-corregir el reset
+-solucionar lo del loop del audio al final
+-ganar al llegar a la línea de meta
+-agregar el skatepark al fondo
+-perder al completar skate
+-agregar postes de luz
+-elegir un único sonido para los treats
+-actualizar la carpeta del proyecto .pdf
+-agregar placa de controles
+- centrar el canvas a la página
+- agregar un listener de key down para la barra espaciadora y la tecla de Enter que permita avanzar por las placas y aceptar los botones
+- recorrido más extenso (flor)
+- hacer un sprite para el botón "jugar" color verde y rosa
+- hacer un sprite de una flecha para el botón de avanzar hacia la derecha para las placas de instrucciones, color verde y rosa
+- cambiar la tipografía y el tamaño de los créditos
+- agrandar las placas de instrucciones para que se lean bien (se les podría quitar el recuadro transparente)
+- hacer las nuevas placas
+- reemplazar la imagen de controles (hay 2 versiones, una con los botones originales y otra con unos que descargué)
+- actualizar el texto y cambiar la tipografía
+- hacer un sprite para el botón que diga "skate", color rosa y color verde
+- sprite de botones verde y rosa que midan lo mismo x2
+- hover prueba
+- hacer una miniatura del juego para la página de la cátedra (flor)
+- un .gif del título "tricks for treats" para el fondo de la página (flor)
+- hacer los treats a mano tipo rotoscopía (juan)
+- la placa del inicio sin fondo ni botón
+- ajustar la medida a la de las placas de intrucciones
+- agregar que se puede pausar con "P"
+- agregar tacho y cono con color a las placas
+- ajustar la medida a la de las placas de intrucciones
+- agregar botones hover (juan o flor)
+- darle dinamismo a los movimientos de goofy (consulta male)
+
+-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
+
