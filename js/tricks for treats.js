@@ -7,6 +7,28 @@
 let canvas;
 let ctx;
 
+const LOGICAL_WIDTH = 800;
+const LOGICAL_HEIGHT = 450;
+
+let hotspotLayer;
+let activeHotspots = [];
+let hotspotSignature = '';
+
+const UI_HITBOXES = {
+    start: createRect(350, 275, 100, 60),
+    arrow: createRect(740, 385, 40, 50),
+    controlsPlay: createRect(570, 100, 100, 60),
+    finalRestart: createRect(320, 300, 150, 80)
+};
+
+let inicioButtonHover = false;
+let instructionScreen = null;
+let instructionArrowHover = false;
+let controlesButtonHover = false;
+let finalButtonHover = false;
+let finalScreenInitialized = false;
+let juegoEnMarcha = false;
+
 //font
 let fuente = new FontFace('Flood', "url(fonts/Flood.otf) format('opentype')");
 document.fonts.add(fuente);
@@ -149,15 +171,185 @@ audioPerdedor.volume = 0.3;
 audioInstrucciones.volume = 0.2;
 audioClick.volume = 0.5;
 
+// track audio that was playing so we can restore after tab visibility changes
+let previousAudioStates = new Map();
+
 
 
 let tftStarted = false;
+
+function createRect(x, y, width, height) {
+    return { x: x, y: y, width: width, height: height };
+}
+
+function rectContains(point, rect) {
+    return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+}
+
+function percent(value, total) {
+    return (value / total) * 100;
+}
+
+function clearHotspots() {
+    if (!hotspotLayer) return;
+    if (hotspotLayer.childNodes.length > 0) {
+        hotspotLayer.innerHTML = '';
+    }
+    hotspotLayer.style.pointerEvents = 'none';
+    hotspotSignature = '';
+    activeHotspots = [];
+}
+
+function setHotspots(items) {
+    if (!hotspotLayer) return;
+    if (!items || items.length === 0) {
+        clearHotspots();
+        return;
+    }
+    hotspotLayer.style.pointerEvents = 'auto';
+    const signature = items.map(function (item) { return item.id; }).join('|');
+    if (signature === hotspotSignature) {
+        return;
+    }
+    hotspotLayer.innerHTML = '';
+    hotspotSignature = signature;
+    activeHotspots = items.map(function (item) {
+        return { id: item.id, rect: item.rect, onClick: item.onClick };
+    });
+
+    items.forEach(function (item) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hotspot-btn';
+        if (item.label) {
+            btn.setAttribute('aria-label', item.label);
+        }
+        btn.style.left = percent(item.rect.x, LOGICAL_WIDTH) + '%';
+        btn.style.top = percent(item.rect.y, LOGICAL_HEIGHT) + '%';
+        btn.style.width = percent(item.rect.width, LOGICAL_WIDTH) + '%';
+        btn.style.height = percent(item.rect.height, LOGICAL_HEIGHT) + '%';
+
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof item.onClick === 'function') {
+                item.onClick();
+            }
+        });
+
+        if (typeof item.onEnter === 'function') {
+            btn.addEventListener('mouseenter', item.onEnter);
+            btn.addEventListener('focus', item.onEnter);
+        }
+
+        if (typeof item.onLeave === 'function') {
+            btn.addEventListener('mouseleave', item.onLeave);
+            btn.addEventListener('blur', item.onLeave);
+        }
+
+        hotspotLayer.appendChild(btn);
+    });
+}
+
+function renderInicio() {
+    borrar();
+    ctx.drawImage(imgPlacaInicio, 0, 0);
+    ctx.drawImage(inicioButtonHover ? imgBotonInicio2 : imgBotonInicio, UI_HITBOXES.start.x, UI_HITBOXES.start.y, UI_HITBOXES.start.width, UI_HITBOXES.start.height);
+}
+
+function renderInstructionScreen() {
+    borrar();
+    if (instructionScreen === 'goofy') {
+        ctx.drawImage(imgInstruccionesGoofy, 0, 0);
+    } else if (instructionScreen === 'obstaculos') {
+        ctx.drawImage(imgInstruccionesObstaculos, 0, 0);
+    } else if (instructionScreen === 'skatepark') {
+        ctx.drawImage(imgInstruccionesSkatepark, 0, 0);
+    }
+    ctx.drawImage(instructionArrowHover ? imgBotonFlecha2 : imgBotonFlecha, UI_HITBOXES.arrow.x, UI_HITBOXES.arrow.y, UI_HITBOXES.arrow.width, UI_HITBOXES.arrow.height);
+}
+
+function renderControlesScreen() {
+    borrar();
+    ctx.drawImage(imgControles, 0, 0);
+    ctx.drawImage(controlesButtonHover ? imgBotonInicio2 : imgBotonInicio, UI_HITBOXES.controlsPlay.x, UI_HITBOXES.controlsPlay.y, UI_HITBOXES.controlsPlay.width, UI_HITBOXES.controlsPlay.height);
+}
+
+function renderFinalScreen() {
+    borrar();
+    if (vidas < 1) {
+        ctx.drawImage(imgFinalPerdedor, 0, 0);
+        ctx.drawImage(finalButtonHover ? imgBotonNuevo2 : imgBotonNuevo, UI_HITBOXES.finalRestart.x, UI_HITBOXES.finalRestart.y, UI_HITBOXES.finalRestart.width, UI_HITBOXES.finalRestart.height);
+        ctx.font = "20px Flood";
+        ctx.fillStyle = "#FFF";
+        ctx.fillText("puntos: " + puntos, 340, 150);
+        audioPatina.pause();
+        audioSalto.pause();
+    } else {
+        ctx.drawImage(imgFinalGanador, 0, 0);
+        ctx.drawImage(finalButtonHover ? imgBotonNuevo2 : imgBotonNuevo, UI_HITBOXES.finalRestart.x, UI_HITBOXES.finalRestart.y, UI_HITBOXES.finalRestart.width, UI_HITBOXES.finalRestart.height);
+        ctx.font = "20px Flood";
+        ctx.fillStyle = "#FFF";
+        ctx.fillText("puntos: " + puntos, 340, 145);
+        audioMusica.pause();
+        audioPatina.pause();
+        audioSalto.pause();
+    }
+}
+
+function goToInstruccionesGoofy() {
+    audioClick.play().catch(function () { });
+    audioInstrucciones.currentTime = 0;
+    audioInstrucciones.play().catch(function () { });
+    dibujarInstruccionesGoofy();
+}
+
+function goToInstruccionesObstaculos() {
+    audioClick.play().catch(function () { });
+    dibujarInstruccionesObstaculos();
+}
+
+function goToInstruccionesSkatepark() {
+    audioClick.play().catch(function () { });
+    dibujarInstruccionesSkatepark();
+}
+
+function goToControles() {
+    audioClick.play().catch(function () { });
+    dibujarControles();
+}
+
+function startGameFromControles() {
+    audioClick.play().catch(function () { });
+    audioMusica.currentTime = 0;
+    audioMusica.play().catch(function () { });
+    audioInstrucciones.pause();
+    controles = false;
+    clearHotspots();
+    if (!juegoEnMarcha) {
+        juegoEnMarcha = true;
+        juego();
+    }
+}
+
+function restartFromFinal() {
+    if (!fin) return;
+    audioClick.play().catch(function () { });
+    reset();
+    if (ganaste) {
+        audioMusica.currentTime = 0;
+    }
+    finalButtonHover = false;
+    finalScreenInitialized = false;
+    clearHotspots();
+}
 
 function tft() {
     if (tftStarted) return; // guard against double-calls
     tftStarted = true;
     canvas = document.getElementById("canvas");
     ctx = canvas.getContext("2d");
+    hotspotLayer = document.getElementById("hotspots");
     // show a simple loading message while assets load
     borrar();
     ctx.save();
@@ -188,38 +380,18 @@ function tft() {
         // touchstart: procesar toques activos
         canvas.addEventListener('touchstart', function (ev) {
             ev.preventDefault();
-            // If we're on an UI plate, interpret a single touch as a tap on buttons
-            if (ev.touches && ev.touches.length === 1) {
+            if (ev.touches && ev.touches.length === 1 && activeHotspots.length > 0) {
                 const pos = getCanvasCoords(ev.touches[0]);
-                // Reuse the same hit tests as the click handler for plates
-                if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
-                    audioClick.play().catch(() => {});
-                    dibujarInstruccionesGoofy();
-                    audioInstrucciones.play().catch(() => {});
-                    return;
-                } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-                    audioClick.play().catch(() => {});
-                    dibujarInstruccionesObstaculos();
-                    return;
-                } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-                    audioClick.play().catch(() => {});
-                    dibujarInstruccionesSkatepark();
-                    return;
-                } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-                    audioClick.play().catch(() => {});
-                    dibujarControles();
-                    return;
-                } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) {
-                    audioClick.play().catch(() => {});
-                    audioMusica.currentTime = 0;
-                    audioMusica.play().catch(() => {});
-                    tft();
-                    juego();
-                    return;
-                } else if (fin == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) {
-                    reset();
-                    return;
+                for (let i = 0; i < activeHotspots.length; i++) {
+                    const hot = activeHotspots[i];
+                    if (rectContains(pos, hot.rect)) {
+                        if (typeof hot.onClick === 'function') {
+                            hot.onClick();
+                        }
+                        return;
+                    }
                 }
+                return;
             }
             // otherwise treat as gameplay touch input (possibly multi-touch)
             processTouches(ev.touches);
@@ -228,12 +400,14 @@ function tft() {
         // touchmove: actualizar acciones según el/los toques actuales
         canvas.addEventListener('touchmove', function (ev) {
             ev.preventDefault();
+            if (activeHotspots.length > 0) return;
             processTouches(ev.touches);
         }, { passive: false });
 
         // touchend / touchcancel: procesar los toques restantes; si no hay toques, parar movimiento
         function handleTouchEnd(ev) {
             ev.preventDefault();
+            if (activeHotspots.length > 0) return;
             if (ev.touches && ev.touches.length > 0) {
                 processTouches(ev.touches);
             } else {
@@ -259,46 +433,105 @@ function tft() {
 
 //dibujar placa del inicio
 function dibujarInicio() {
-    borrar();
-    ctx.drawImage(imgPlacaInicio, 0, 0);
-    ctx.drawImage(imgBotonInicio, 350, 275, 100, 60);
     placaInicio = true;
+    controles = false;
+    instruccionesGoofy = false;
+    instruccionesObstaculos = false;
+    instruccionesSkatepark = false;
+    fin = false;
+    inicioButtonHover = false;
+    finalButtonHover = false;
+    finalScreenInitialized = false;
+    instructionScreen = null;
+    renderInicio();
+    setHotspots([
+        {
+            id: 'start',
+            label: 'Jugar',
+            rect: UI_HITBOXES.start,
+            onClick: goToInstruccionesGoofy
+        }
+    ]);
 };
 
 //dibujar placa de intrucciones goofy
 function dibujarInstruccionesGoofy() {
-    borrar();
-    ctx.drawImage(imgInstruccionesGoofy, 0, 0);
-    ctx.drawImage(imgBotonFlecha, 740, 385, 40, 50);
-    instruccionesGoofy = true;
     placaInicio = false;
+    instruccionesGoofy = true;
+    instruccionesObstaculos = false;
+    instruccionesSkatepark = false;
+    controles = false;
+    instructionScreen = 'goofy';
+    instructionArrowHover = false;
+    renderInstructionScreen();
+    setHotspots([
+        {
+            id: 'arrow-goofy',
+            label: 'Siguiente',
+            rect: UI_HITBOXES.arrow,
+            onClick: goToInstruccionesObstaculos
+        }
+    ]);
 };
 
 //dibujar placa de intrucciones obstaculos
 function dibujarInstruccionesObstaculos() {
-    borrar();
-    ctx.drawImage(imgInstruccionesObstaculos, 0, 0);
-    ctx.drawImage(imgBotonFlecha, 740, 385, 40, 50);
-    instruccionesObstaculos = true;
+    placaInicio = false;
     instruccionesGoofy = false;
+    instruccionesObstaculos = true;
+    instruccionesSkatepark = false;
+    controles = false;
+    instructionScreen = 'obstaculos';
+    instructionArrowHover = false;
+    renderInstructionScreen();
+    setHotspots([
+        {
+            id: 'arrow-obstaculos',
+            label: 'Siguiente',
+            rect: UI_HITBOXES.arrow,
+            onClick: goToInstruccionesSkatepark
+        }
+    ]);
 };
 
 //dibujar placa de intrucciones skatepark
 function dibujarInstruccionesSkatepark() {
-    borrar();
-    ctx.drawImage(imgInstruccionesSkatepark, 0, 0);
-    ctx.drawImage(imgBotonFlecha, 740, 385, 40, 50);
-    instruccionesSkatepark = true;
+    placaInicio = false;
+    instruccionesGoofy = false;
     instruccionesObstaculos = false;
+    instruccionesSkatepark = true;
+    controles = false;
+    instructionScreen = 'skatepark';
+    instructionArrowHover = false;
+    renderInstructionScreen();
+    setHotspots([
+        {
+            id: 'arrow-skatepark',
+            label: 'Siguiente',
+            rect: UI_HITBOXES.arrow,
+            onClick: goToControles
+        }
+    ]);
 };
 
 //dibujar placa de controles
 function dibujarControles() {
-    borrar();
-    ctx.drawImage(imgControles, 0, 0);
-    ctx.drawImage(imgBotonInicio, 570, 100, 100, 60);
-    controles = true;
+    placaInicio = false;
+    instruccionesGoofy = false;
+    instruccionesObstaculos = false;
     instruccionesSkatepark = false;
+    controles = true;
+    instructionScreen = null;
+    controlesButtonHover = false;
+    renderControlesScreen();
+    setHotspots([
+        {
+            id: 'controls-play',
+            label: 'Comenzar juego',
+            rect: UI_HITBOXES.controlsPlay,
+            onClick: startGameFromControles
+        }
+    ]);
 };
 
 function juego() {
@@ -307,6 +540,13 @@ function juego() {
     placaInicio = false;
     controles = false;
     audioInstrucciones.pause();
+    if (!fin && activeHotspots.length) {
+        clearHotspots();
+    }
+    if (!fin) {
+        finalScreenInitialized = false;
+        finalButtonHover = false;
+    }
     borrar();
     requestAnimationFrame(juego);
 
@@ -357,7 +597,7 @@ function juego() {
             goofy.x += goofy.vx
 
             // Clamp goofy.x to canvas logical bounds so the character cannot escape left/right
-            const logicalW = 800;
+            const logicalW = LOGICAL_WIDTH;
             if (goofy.x < 0) goofy.x = 0;
             if (goofy.x > logicalW - goofy.ancho) goofy.x = logicalW - goofy.ancho;
 
@@ -474,32 +714,19 @@ function dibujarTexto() {
 
 //dibujar placa según ganaste o perdiste
 function dibujarFinal() {
-    if (vidas < 1) {
-        //PERDISTE
-        borrar();
-        ctx.drawImage(imgFinalPerdedor, 0, 0);
-        ctx.drawImage(imgBotonNuevo, 320, 300, 150, 80);
-        ctx.font = "20px Flood";
-        ctx.fillStyle = "#FFF";
-        ctx.fillText("puntos: " + puntos, 340, 150);
-
-        /*audioMusica.pause();*/
-        audioPatina.pause();
-        audioSalto.pause();
-    } else {
-        //GANASTE
-        borrar();
-
-        ctx.drawImage(imgFinalGanador, 0, 0);
-        ctx.drawImage(imgBotonNuevo, 320, 300, 150, 80);
-        ctx.font = "20px Flood";
-        ctx.fillStyle = "#FFF";
-        ctx.fillText("puntos: " + puntos, 340, 145);
-
-        audioMusica.pause();
-        audioPatina.pause();
-        audioSalto.pause();
-    };
+    if (!finalScreenInitialized) {
+        finalButtonHover = false;
+        setHotspots([
+            {
+                id: 'final-restart',
+                label: 'Jugar de nuevo',
+                rect: UI_HITBOXES.finalRestart,
+                onClick: restartFromFinal
+            }
+        ]);
+        finalScreenInitialized = true;
+    }
+    renderFinalScreen();
 };
 
 //borrar
@@ -535,12 +762,12 @@ function resizeCanvasForDPR() {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     // logical resolution we want to keep for drawing commands
-    const logicalWidth = 800;
-    const logicalHeight = 450;
+    const targetWidth = LOGICAL_WIDTH;
+    const targetHeight = LOGICAL_HEIGHT;
 
     // set backing store size
-    canvas.width = Math.round(logicalWidth * dpr);
-    canvas.height = Math.round(logicalHeight * dpr);
+    canvas.width = Math.round(targetWidth * dpr);
+    canvas.height = Math.round(targetHeight * dpr);
 
     // keep the CSS size as responsive (it's controlled by CSS: width:100% max-width:800px)
     // Reset transforms and scale the context so drawing can use logical coordinates
@@ -589,6 +816,29 @@ function loadAllAssets() {
     });
 }
 
+function getAllAudios() {
+    return [audioGolpe, audioEnergizante, audioRemera, audioAerosol, audioZapatillas, audioSalto, audioPatina, audioMusica, audioGanaste, audioCaida, audioPerdedor, audioInstrucciones, audioClick];
+}
+
+function pauseAllGameAudio() {
+    previousAudioStates.clear();
+    getAllAudios().forEach(function (a) {
+        if (!a) return;
+        if (!a.paused && !a.ended) {
+            previousAudioStates.set(a, a.currentTime);
+        }
+        a.pause();
+    });
+}
+
+function resumePausedGameAudio() {
+    if (document.hidden) return;
+    previousAudioStates.forEach(function (_, audio) {
+        audio.play().catch(function () { });
+    });
+    previousAudioStates.clear();
+}
+
 // Procesar un TouchList (o array-like) y aplicar controles según zonas del canvas
 function processTouches(touches) {
     if (!canvas) return;
@@ -597,41 +847,44 @@ function processTouches(touches) {
     const w = canvas.width / dpr;
     const h = canvas.height / dpr;
     const leftBound = w * 0.33;
-    const rightBound = w * 0.66;
-    const midY = h * 0.5;
+    const rightBound = w * 0.67;
+    const actionBarHeight = h * 0.35; // top strip for jump/down buttons
 
-    // Primero: decidir movimiento horizontal (left/right). Si existe al menos
-    // un touch en la izquierda, retroceder; si existe al menos uno en derecha, avanzar.
     let foundLeft = false;
     let foundRight = false;
+    let jumpRequested = false;
+    let downRequested = false;
+
     for (let i = 0; i < touches.length; i++) {
         const pos = getCanvasCoords(touches[i]);
+
+        // top corners reserved for jump/down
+        if (pos.y <= actionBarHeight) {
+            if (pos.x <= leftBound) {
+                downRequested = true;
+            } else if (pos.x >= rightBound) {
+                jumpRequested = true;
+            }
+            continue;
+        }
+
+        // movement zones live below the action bar
         if (pos.x < leftBound) foundLeft = true;
         if (pos.x > rightBound) foundRight = true;
-        if (foundLeft && foundRight) break;
     }
+
     if (foundLeft && !foundRight) {
         goofy.retroceder();
     } else if (foundRight && !foundLeft) {
         goofy.avanzar();
     } else if (!foundLeft && !foundRight) {
-        // no touches horizontales -> parar movimiento horizontal
         goofy.vx = 0;
     }
 
-    // Luego: acciones verticales en la columna central
-    for (let i = 0; i < touches.length; i++) {
-        const pos = getCanvasCoords(touches[i]);
-        if (pos.x >= leftBound && pos.x <= rightBound) {
-            if (pos.y < midY) {
-                // top middle -> salto
-                goofy.saltar();
-            } else {
-                // bottom middle -> bajar pero sólo si está saltando
-                if (goofy.saltando) goofy.bajar();
-            }
-            break; // una vez aplicada la acción vertical, salir
-        }
+    if (jumpRequested) {
+        goofy.saltar();
+    } else if (downRequested && goofy.saltando) {
+        goofy.bajar();
     }
 }
 
@@ -649,33 +902,28 @@ function drawTouchButtons() {
     const w = 800; // logical width
     const h = 450; // logical height
     const leftBound = w * 0.33;
-    const rightBound = w * 0.66;
-    const midY = h * 0.5;
+    const rightBound = w * 0.67;
+    const actionBarHeight = h * 0.35;
+    const radius = 32;
 
     ctx.save();
-    ctx.globalAlpha = 0.25;
-    ctx.fillStyle = '#000';
-
-    // left zone (visual on left third)
-    ctx.fillRect(0, 0, leftBound, h);
-    // right zone (visual on right third)
-    ctx.fillRect(rightBound, 0, w - rightBound, h);
-    // middle top (jump)
-    ctx.fillRect(leftBound, 0, rightBound - leftBound, midY);
-    // middle bottom (down)
-    ctx.fillRect(leftBound, midY, rightBound - leftBound, h - midY);
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '36px Flood';
+    ctx.font = '32px Flood';
 
-    // icons/text for zones
-    ctx.fillText('◀', leftBound / 2, h / 2);
-    ctx.fillText('▶', rightBound + (w - rightBound) / 2, h / 2);
-    ctx.fillText('▲', w / 2, midY / 2);
-    ctx.fillText('▼', w / 2, midY + (h - midY) / 2);
+    function drawCircleButton(x, y, label) {
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, x, y + 2);
+    }
+
+    drawCircleButton(leftBound / 2, actionBarHeight + (h - actionBarHeight) / 2, '◀');
+    drawCircleButton(rightBound + (w - rightBound) / 2, actionBarHeight + (h - actionBarHeight) / 2, '▶');
+    drawCircleButton(leftBound / 2, actionBarHeight / 2, '▼');
+    drawCircleButton(rightBound + (w - rightBound) / 2, actionBarHeight / 2, '▲');
 
     ctx.restore();
 }
@@ -727,6 +975,13 @@ function reanudar() {
 function reset() {
     borrar();
     reanudar();
+    clearHotspots();
+    finalScreenInitialized = false;
+    finalButtonHover = false;
+    inicioButtonHover = false;
+    instructionArrowHover = false;
+    controlesButtonHover = false;
+    instructionScreen = null;
     audioGanaste.pause();
     posicionFaroles = 0;
     posicionFondo1 = 0;
@@ -972,136 +1227,50 @@ document.addEventListener("keyup", function (e) {
     };
     //avanzar por las placas y presionar botones con tecla Enter o barra espaciadora
     if (e.key == "Enter" || e.key == " ") {
-        if (placaInicio == true) { //de placa inicio a instrucciones goofy
-            audioClick.play().catch(() => {});
-            dibujarInstruccionesGoofy();
-            audioInstrucciones.play().catch(() => {});
-        } else if (instruccionesGoofy == true) { //de instrucciones goofy a instrucciones obstaculos
-            audioClick.play().catch(() => {});
-            dibujarInstruccionesObstaculos();
-        } else if (instruccionesObstaculos == true) { //de instrucciones obstaculos a instrucciones skatepark
-            audioClick.play().catch(() => {});
-            dibujarInstruccionesSkatepark();
-        } else if (instruccionesSkatepark == true) { //de instrucciones skatepark a  instrucciones controles
-            audioClick.play().catch(() => {});
-            dibujarControles();
-        } else if (controles == true) { //de controles al juego
-            audioClick.play().catch(() => {});
-            audioMusica.currentTime = 0;
-            audioMusica.play().catch(() => {});
-            tft();
-            juego();
-        } else if (fin == true) { //al llegar al fin, reiniciar
-            audioClick.play().catch(() => {});
-            reset();
+        if (placaInicio == true) {
+            goToInstruccionesGoofy();
+        } else if (instruccionesGoofy == true) {
+            goToInstruccionesObstaculos();
+        } else if (instruccionesObstaculos == true) {
+            goToInstruccionesSkatepark();
+        } else if (instruccionesSkatepark == true) {
+            goToControles();
+        } else if (controles == true) {
+            startGameFromControles();
+        } else if (fin == true) {
+            restartFromFinal();
         }
     };
 });
 
 //listener para click
 document.addEventListener('click', function (e) {
-    if (!canvas) return; // ignore document clicks before canvas is ready
+    if (!canvas) return;
+    if (activeHotspots.length === 0) return;
     const pos = getCanvasCoords(e);
-    console.log("canvas X:" + Math.round(pos.x) + " Y:" + Math.round(pos.y));
-    //de placa inicio a instrucciones goofy
-    // NOTE: hitboxes use canvas coordinates where the buttons are drawn
-    if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
-        audioClick.play().catch(() => {});
-        dibujarInstruccionesGoofy();
-        audioInstrucciones.play().catch(() => {});
-    } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones goofy a instrucciones obstaculos
-        audioClick.play().catch(() => {});
-        dibujarInstruccionesObstaculos();
-    } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones obstaculos a instrucciones skatepark
-        audioClick.play().catch(() => {});
-        dibujarInstruccionesSkatepark();
-    } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) { //de instrucciones skatepark a instrucciones controles
-        audioClick.play().catch(() => {});
-        dibujarControles();
-    } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) { //de controles al juego
-        audioClick.play().catch(() => {});
-        audioMusica.currentTime = 0;
-        audioMusica.play().catch(() => {});
-        tft();
-        juego();
-    } else if (fin == true && ganaste == false && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) { //al perder o ganar, reiniciar
-        audioClick.play().catch(() => {});
-        reset();
-    } else if (fin == true && ganaste == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) { //al perder o ganar, reiniciar
-        audioClick.play().catch(() => {});
-        reset();
-        audioMusica.currentTime = 0;
+    for (let i = 0; i < activeHotspots.length; i++) {
+        const hot = activeHotspots[i];
+        if (rectContains(pos, hot.rect)) {
+            if (typeof hot.onClick === 'function') {
+                hot.onClick();
+            }
+            break;
+        }
     }
 });
+
+document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+        pauseAllGameAudio();
+    } else {
+        resumePausedGameAudio();
+    }
+});
+
+window.addEventListener('blur', pauseAllGameAudio);
+window.addEventListener('focus', resumePausedGameAudio);
 
 //listener para hover
-document.addEventListener('mousemove', function (e) {
-    if (!canvas) return; // ignore hover before canvas is ready
-    const pos = getCanvasCoords(e);
-    //de placa inicio a instrucciones goofy
-    if (placaInicio == true) {
-        if (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335) {
-            canvas.style.cursor = "pointer";
-            ctx.drawImage(imgBotonInicio2, 350, 275, 100, 60);
-        } else {
-            canvas.style.cursor = "default";
-            borrar();
-            ctx.drawImage(imgPlacaInicio, 0, 0);
-            ctx.drawImage(imgBotonInicio, 350, 275, 100, 60);
-        };
-    } else if (instruccionesGoofy == true || instruccionesObstaculos == true || instruccionesSkatepark == true) {
-        if (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435) { //entre placas de instrucciones
-            canvas.style.cursor = "pointer";
-            ctx.drawImage(imgBotonFlecha2, 740, 385, 40, 50);
-        } else {
-            canvas.style.cursor = "default";
-            ctx.drawImage(imgBotonFlecha, 740, 385, 40, 50);
-        };
-    } else if (controles == true) {
-        if (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160) {//de placa de controles al juego
-            canvas.style.cursor = "pointer";
-            ctx.drawImage(imgBotonInicio2, 570, 100, 100, 60);
-        } else {
-            canvas.style.cursor = "default";
-            ctx.drawImage(imgBotonInicio, 570, 100, 100, 60);
-        };
-    } else if (fin == true) { //al perder o ganar
-        if (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380) {
-            canvas.style.cursor = "pointer";
-            borrar();
-            ctx.drawImage(imgBotonNuevo2, 320, 300, 150, 80);
-        } else {
-            canvas.style.cursor = "default";
-            borrar();
-            ctx.drawImage(imgBotonNuevo2, 320, 300, 150, 80);
-        };
-    } else if (inicio == true) { //durante el juego
-        canvas.style.cursor = "default";
-    };
-});
-
-document.addEventListener("mouseup", function (e) {
-    if (!canvas) return; // ignore before canvas is ready
-    const pos = getCanvasCoords(e);
-    if (placaInicio == true && (pos.x > 350 && pos.x < 450 && pos.y > 275 && pos.y < 335)) {
-        audioClick.play().catch(() => {});
-    } else if (instruccionesGoofy == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play().catch(() => {});
-    } else if (instruccionesObstaculos == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play().catch(() => {});
-    } else if (instruccionesSkatepark == true && (pos.x > 740 && pos.x < 780 && pos.y > 385 && pos.y < 435)) {
-        audioClick.play().catch(() => {});
-    } else if (controles == true && (pos.x > 570 && pos.x < 670 && pos.y > 100 && pos.y < 160)) {
-        audioClick.play().catch(() => {});
-    } else if (fin == true && (pos.x > 320 && pos.x < 470 && pos.y > 300 && pos.y < 380)) {
-        audioClick.play().catch(() => {});
-    };
-    /*
-    ctx.drawImage
-    /*if (e.x>385 && e.x<415 && e.y>465 && e.y< 515){
-    }
-}*/
-});
 
 // local storage (example - currently disabled)
 /*
